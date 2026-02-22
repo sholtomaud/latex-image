@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# pdflatex-container
+#
+# A drop-in replacement for pdflatex that compiles inside the al23-latex
+# Apple container image. Stateless — spins up and tears down per compile.
+#
+# VSCode LaTeX Workshop calls this script as:
+#   pdflatex-container [pdflatex-flags] /absolute/host/path/to/file.tex
+#
+# The script:
+#   1. Extracts the host directory and filename from the last argument
+#   2. Mounts that directory into the container at /workspace
+#   3. Runs pdflatex inside the container on the file
+#   4. Output (PDF + logs) lands in the same host directory automatically
+
+set -euo pipefail
+
+IMAGE_NAME="al23-latex"
+
+# ----------------------------------------
+# Ensure the Apple container system is up
+# ----------------------------------------
+container system start 2>/dev/null || true
+
+# ----------------------------------------
+# Parse arguments
+# The last argument is always the .tex file path.
+# Everything before it are flags passed through to pdflatex.
+# ----------------------------------------
+if [ "$#" -lt 1 ]; then
+    echo "Usage: pdflatex-container [pdflatex-flags] /path/to/file.tex" >&2
+    exit 1
+fi
+
+# Split: flags are all args except the last; file is the last arg
+TEX_FILE_HOST="${!#}"                      # last argument (host absolute path)
+FLAGS=("${@:1:$(($#-1))}")                 # all args except last
+
+# Resolve to absolute path in case a relative path slips through
+TEX_FILE_HOST="$(cd "$(dirname "$TEX_FILE_HOST")" && pwd)/$(basename "$TEX_FILE_HOST")"
+
+HOST_DIR="$(dirname "$TEX_FILE_HOST")"
+TEX_FILENAME="$(basename "$TEX_FILE_HOST")"
+CONTAINER_DIR="/workspace"
+TEX_FILE_CONTAINER="${CONTAINER_DIR}/${TEX_FILENAME}"
+
+# ----------------------------------------
+# Run pdflatex inside a throwaway container
+# --rm          removes the container after compile
+# --mount       binds the project folder to /workspace (read + write)
+# --cwd         sets working dir so relative \input{} paths resolve correctly
+# ----------------------------------------
+container run \
+    --rm \
+    --mount "type=bind,source=${HOST_DIR},target=${CONTAINER_DIR}" \
+    --cwd "${CONTAINER_DIR}" \
+    "${IMAGE_NAME}" \
+    pdflatex "${FLAGS[@]}" "${TEX_FILE_CONTAINER}"
