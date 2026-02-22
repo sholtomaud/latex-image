@@ -1,0 +1,69 @@
+{
+    // ----------------------------------------
+    // LaTeX Workshop — stateless container setup
+    // Requires: pdflatex-container installed in /usr/local/bin
+    // (run `make install` from your latex-container repo)
+    // ----------------------------------------
+
+    "latex-workshop.view.pdf.viewer": "browser",
+
+    // Clean auxiliary files after each build
+    "latex-workshop.latex.autoClean.run": "onBuilt",
+    "latex-workshop.latex.clean.method": "glob",
+    "latex-workshop.latex.clean.fileTypes": [
+        "*.aux", "*.bbl", "*.blg", "*.log", "*.toc",
+        "*.lof", "*.lot", "*.fls", "*.out",
+        "*.fdb_latexmk", "*.synctex.gz"
+    ],
+
+    // ----------------------------------------
+    // Tools — each tool is one shell command.
+    // %DOCFILE% = full host absolute path to the .tex file.
+    // Our wrapper script handles mounting + path translation.
+    // ----------------------------------------
+    "latex-workshop.latex.tools": [
+        {
+            "name": "pdflatex-container",
+            "command": "pdflatex-container",
+            "args": [
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOCFILE%"
+            ]
+        },
+        {
+            // Two-pass for cross-references, TOC, etc.
+            "name": "pdflatex-container-2",
+            "command": "pdflatex-container",
+            "args": [
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOCFILE%"
+            ]
+        }
+    ],
+
+    // ----------------------------------------
+    // Recipes — ordered list of tools to run.
+    // Use "pdflatex x1" for simple docs, "pdflatex x2" when you need
+    // TOC / cross-references to resolve correctly.
+    // ----------------------------------------
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "pdflatex (single pass)",
+            "tools": [
+                "pdflatex-container"
+            ]
+        },
+        {
+            "name": "pdflatex (two pass — TOC / refs)",
+            "tools": [
+                "pdflatex-container",
+                "pdflatex-container-2"
+            ]
+        }
+    ],
+
+    // Use the two-pass recipe by default so refs always resolve
+    "latex-workshop.latex.recipe.default": "pdflatex (two pass — TOC / refs)"
+}
