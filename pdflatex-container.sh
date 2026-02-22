@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-IMAGE_NAME="al23-latex"
+IMAGE_NAME="ubuntu-latex"
 
 # ----------------------------------------
 # Ensure the Apple container system is up
