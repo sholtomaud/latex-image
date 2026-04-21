@@ -20,7 +20,7 @@ IMAGE_NAME="ubuntu-latex"
 # ----------------------------------------
 # Ensure the Apple container system is up
 # ----------------------------------------
-container system start 2>/dev/null || true
+container system start >/dev/null 2>&1 || true
 
 # ----------------------------------------
 # Parse arguments

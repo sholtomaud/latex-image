@@ -8,6 +8,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # -----------------------------
 # Install LaTeX + Tools
 # -----------------------------
+# -----------------------------
+# Install LaTeX + Tools
+# -----------------------------
 RUN apt-get update && apt-get install -y \
         texlive-latex-base \
         texlive-latex-recommended \
@@ -17,6 +20,12 @@ RUN apt-get update && apt-get install -y \
         texlive-pictures \
         texlive-science \
         texlive-bibtex-extra \
+        texlive-extra-utils \
+        texlive-xetex \
+        pandoc \
+        libyaml-tiny-perl \
+        libfile-homedir-perl \
+        libunicode-linebreak-perl \
         biber \
         latexmk \
         git \

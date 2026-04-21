@@ -1,8 +1,8 @@
 {
     // ----------------------------------------
     // LaTeX Workshop — stateless container setup
-    // Requires: pdflatex-container installed in /usr/local/bin
-    // (run `make install` from your latex-container repo)
+    // Requires: all wrapper scripts installed in /usr/local/bin
+    // (run `make install-all` from your latex-container repo)
     // ----------------------------------------
     "latex-workshop.view.pdf.viewer": "browser",
     // Clean auxiliary files after each build
@@ -24,7 +24,7 @@
     // ----------------------------------------
     // Tools — each tool is one shell command.
     // %DOCFILE% = full host absolute path to the .tex file.
-    // Our wrapper script handles mounting + path translation.
+    // Our wrapper scripts handle mounting + path translation.
     // ----------------------------------------
     "latex-workshop.latex.tools": [
         {
@@ -45,12 +45,18 @@
                 "-file-line-error",
                 "%DOCFILE%"
             ]
+        },
+        {
+            // Full build: biber + multi-pass ref resolution
+            "name": "latexmk-container",
+            "command": "latexmk-container",
+            "args": [
+                "%DOCFILE%"
+            ]
         }
     ],
     // ----------------------------------------
     // Recipes — ordered list of tools to run.
-    // Use "pdflatex x1" for simple docs, "pdflatex x2" when you need
-    // TOC / cross-references to resolve correctly.
     // ----------------------------------------
     "latex-workshop.latex.recipes": [
         {
@@ -65,10 +71,19 @@
                 "pdflatex-container",
                 "pdflatex-container-2"
             ]
+        },
+        {
+            "name": "latexmk (full — biber + refs)",
+            "tools": [
+                "latexmk-container"
+            ]
         }
     ],
-    // Use the two-pass recipe by default so refs always resolve
-    "latex-workshop.latex.recipe.default": "pdflatex (two pass — TOC / refs)",
+    // Use latexmk by default so refs and citations always resolve
+    "latex-workshop.latex.recipe.default": "latexmk (full — biber + refs)",
+    // ----------------------------------------
+    // Formatting — use latexindent via container wrapper
+    // ----------------------------------------
     "latex-workshop.formatting.latex": "latexindent",
     "latex-workshop.formatting.latexindent.path": "latexindent-container"
 }

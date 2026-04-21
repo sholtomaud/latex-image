@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# This script compiles a LaTeX file using latexmk inside a container.
+# Usage: ./latexmk-container.sh path/to/your/file.tex
 set -euo pipefail
 
 IMAGE_NAME="ubuntu-latex"
 
-container system start 2>/dev/null || true
+container system start >/dev/null 2>&1 || true
 
 TEX_FILE_HOST="${!#}"
 TEX_FILE_HOST="$(cd "$(dirname "$TEX_FILE_HOST")" && pwd)/$(basename "$TEX_FILE_HOST")"
