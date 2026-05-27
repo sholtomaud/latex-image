@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenVSCode</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1e1e2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100dvh;
+      gap: 1.5rem;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      opacity: 0.7;
+    }
+
+    .message {
+      font-size: 0.875rem;
+      color: #a6adc8;
+      letter-spacing: 0.05em;
+    }
+
+    .dot-pulse {
+      display: inline-flex;
+      gap: 6px;
+    }
+    .dot-pulse span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #89b4fa;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1;   }
+    }
+  </style>
+</head>
+<body>
+  <svg class="logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="18" fill="#1e1e2e"/>
+    <path d="M72 28L44 56l-16-12-8 8 24 20 36-36-8-8z" fill="#89b4fa"/>
+  </svg>
+
+  <div class="message">Starting editor</div>
+  <div class="dot-pulse"><span></span><span></span><span></span></div>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    // Poll until the IDE responds, then redirect into it.
+    // The redirect target is /ide/ which pwa-server.ts proxies to OpenVSCode.
+    function waitForIDE() {
+      fetch("/ide/", { method: "HEAD" })
+        .then(r => { if (r.ok || r.status === 200) window.location.replace("/ide/"); else retry(); })
+        .catch(retry);
+    }
+    function retry() { setTimeout(waitForIDE, 800); }
+    waitForIDE();
+  </script>
+</body>
+</html>

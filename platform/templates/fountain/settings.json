@@ -1,0 +1,16 @@
+{
+  "editor.wordWrap": "on",
+  "editor.lineHeight": 1.6,
+  "editor.fontSize": 14,
+  "editor.fontFamily": "Courier Prime, Courier New, monospace",
+  "editor.renderWhitespace": "none",
+  "editor.minimap.enabled": false,
+  "editor.scrollBeyondLastLine": false,
+  "workbench.colorTheme": "Default Dark+",
+  "fountain.config.emptyLinesBetweenScenes": 1,
+  "fountain.config.parentheticalNewLineHelper": true,
+  "cSpell.language": "en",
+  "[fountain]": {
+    "editor.wordWrap": "on"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "latex-workshop.latex.tools": [
+    {
+      "name": "latexmk-full",
+      "command": "latexmk",
+      "args": [
+        "-pdf",
+        "-bibtex",
+        "-interaction=nonstopmode",
+        "-synctex=1",
+        "-outdir=%OUTDIR%",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "pdflatex",
+      "command": "pdflatex",
+      "args": [
+        "-interaction=nonstopmode",
+        "-synctex=1",
+        "-outdir=%OUTDIR%",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "biber",
+      "command": "biber",
+      "args": ["%DOCFILE%"]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "latexmk (full)",
+      "tools": ["latexmk-full"]
+    },
+    {
+      "name": "pdflatex × 2 + biber",
+      "tools": ["pdflatex", "biber", "pdflatex", "pdflatex"]
+    },
+    {
+      "name": "pdflatex",
+      "tools": ["pdflatex"]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "latexmk (full)",
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  "latex-workshop.view.pdf.viewer": "tab",
+  "latex-workshop.latex.autoClean.run": "onBuilt",
+  "latex-workshop.latex.clean.method": "glob",
+  "latex-workshop.latex.clean.fileTypes": [
+    "*.aux", "*.bbl", "*.blg", "*.log", "*.toc",
+    "*.lof", "*.lot", "*.fls", "*.out", "*.fdb_latexmk",
+    "*.synctex.gz", "*.abs", "*.bcf", "*.run.xml"
+  ],
+  "latex-workshop.synctex.afterBuild.enabled": true,
+  "editor.formatOnSave": false,
+  "editor.wordWrap": "off",
+  "[latex]": {
+    "editor.tabSize": 2
+  }
+}

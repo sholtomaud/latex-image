@@ -1,0 +1,11 @@
+FROM openvscode-base:latest
+
+# Better Fountain — screenplay syntax highlighting, formatting, and navigation
+# Spell checker for prose writing
+RUN /opt/openvscode-server/bin/openvscode-server \
+        --install-extension piersdeseilligny.better-fountain \
+        --install-extension streetsidesoftware.code-spell-checker \
+        --extensions-dir /opt/vscode-extensions \
+        --user-data-dir /opt/vscode-data
+
+COPY templates/fountain/settings.json /opt/vscode-data/User/settings.json

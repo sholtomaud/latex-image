@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# edit — open the current directory in an OpenVSCode PWA window.
+#
+# Install via: make install   (from the platform repo)
+# Usage:       cd <project> && edit
+
+set -e
+
+TEMPLATE=$(cat .vscode-template 2>/dev/null | tr -d '[:space:]')
+TEMPLATE=${TEMPLATE:-latex}
+IMAGE="openvscode-${TEMPLATE}"
+NAME="edit-$(basename "$PWD")"
+
+# Derive a stable port from the project path so the same directory always
+# binds the same port (range: 49152–65533, leaving one above for VSCODE_PORT).
+PORT=$(( 49152 + $(echo -n "$PWD" | cksum | awk '{print $1}') % 16380 ))
+VSCODE_PORT=$(( PORT + 1 ))
+PDF_PORT=$(( PORT + 2 ))
+
+# Open URL in app-window mode using whatever Chromium browser is available.
+# Calling the binary directly is more reliable than 'open -a ... --args'.
+open_app() {
+  local url="$1"
+  local brave="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+  local chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  local chromium="/Applications/Chromium.app/Contents/MacOS/Chromium"
+
+  if [ -f "$brave" ]; then
+    "$brave" --app="$url" &
+  elif [ -f "$chrome" ]; then
+    "$chrome" --app="$url" &
+  elif [ -f "$chromium" ]; then
+    "$chromium" --app="$url" &
+  else
+    open "$url"
+  fi
+}
+
+# Check if the container is actually running (container ls, not inspect —
+# inspect can return true for stopped/cached containers on Apple Container CLI)
+is_running() {
+  container ls 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -qx "$1"
+}
+
+if is_running "$NAME"; then
+  echo "Already running: $NAME → http://localhost:${PORT}"
+  open_app "http://localhost:${PORT}"
+  exit 0
+fi
+
+# Verify image exists before attempting to run
+if ! container image inspect "$IMAGE" > /dev/null 2>&1; then
+  echo "ERROR: image '$IMAGE' not found." >&2
+  echo "Run: cd <platform-repo> && make build-${TEMPLATE}" >&2
+  exit 1
+fi
+
+echo "Starting ${IMAGE} for '$(basename "$PWD")' on port ${PORT}..."
+
+container run -d --rm \
+  --name  "$NAME" \
+  -v      "$PWD:/workspace" \
+  -e      PORT="$PORT" \
+  -e      VSCODE_PORT="$VSCODE_PORT" \
+  -p      "${PORT}:${PORT}" \
+  "$IMAGE"
+
+# Open immediately — the browser shows a "Starting editor…" splash with
+# auto-refresh until the IDE is ready, so no terminal polling needed.
+open_app "http://localhost:${PORT}"
+
+echo "Editor open.  To stop: container stop ${NAME}"

@@ -1,0 +1,85 @@
+# ── Stage 1: compile the custom extension ────────────────────────────────────
+# Uses node:25-alpine purely as a build tool; the output .vsix is copied out.
+FROM node:25-alpine AS ext-builder
+
+WORKDIR /build
+COPY extensions/project-status   /build/project-status
+COPY extensions/project-dashboard /build/project-dashboard
+
+RUN cd project-status \
+    && npm install \
+    && npm run compile \
+    && npx vsce package --no-yarn --out /build/project-status.vsix
+
+RUN cd project-dashboard \
+    && npm install \
+    && npm run compile \
+    && npx vsce package --no-yarn --out /build/project-dashboard.vsix
+
+# ── Stage 2: runtime base image ───────────────────────────────────────────────
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG VSCODE_VERSION=1.109.5
+ARG NODE_VERSION=25.9.0
+
+# System deps
+RUN apt-get update && apt-get install -y \
+        curl \
+        git \
+        ca-certificates \
+        xz-utils \
+        libatomic1 \
+        socat \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 25 — installed from the official binary tarball so we control the
+# exact version regardless of what the system package manager has.
+RUN ARCH=$(dpkg --print-architecture) \
+    && ARCH_NODE=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x64") \
+    && curl -fsSL \
+       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH_NODE}.tar.xz" \
+    | tar -xJ --strip-components=1 -C /usr/local
+
+# OpenVSCode Server — arm64 or x64 based on build platform
+RUN ARCH=$(dpkg --print-architecture) \
+    && ARCH_VS=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x64") \
+    && curl -fsSL \
+       "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-v${VSCODE_VERSION}/openvscode-server-v${VSCODE_VERSION}-linux-${ARCH_VS}.tar.gz" \
+    | tar -xz -C /opt \
+    && ln -s "/opt/openvscode-server-v${VSCODE_VERSION}-linux-${ARCH_VS}" /opt/openvscode-server
+
+# Pre-create the data and extensions directories inside the image layer so
+# they are not shadowed by any volume mount at runtime.
+RUN mkdir -p /opt/vscode-data/User /opt/vscode-extensions
+
+# Install custom extensions baked in at build time
+COPY --from=ext-builder /build/project-status.vsix   /tmp/project-status.vsix
+COPY --from=ext-builder /build/project-dashboard.vsix /tmp/project-dashboard.vsix
+RUN /opt/openvscode-server/bin/openvscode-server \
+        --install-extension /tmp/project-status.vsix \
+        --install-extension /tmp/project-dashboard.vsix \
+        --extensions-dir /opt/vscode-extensions \
+        --user-data-dir /opt/vscode-data \
+    && rm /tmp/project-status.vsix /tmp/project-dashboard.vsix
+
+# PWA proxy server + shell
+COPY pwa-server.ts /app/pwa-server.ts
+COPY pwa          /app/pwa
+# Required so Node treats pwa-server.ts as ESM (enables 'import' syntax)
+RUN echo '{"type":"module"}' > /app/package.json
+
+# Container entrypoint
+COPY scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# MCP server (optional sidecar — started only if the binary is present at runtime)
+COPY mcp /app/mcp
+
+RUN mkdir -p /workspace
+WORKDIR /workspace
+
+EXPOSE 5173
+
+ENTRYPOINT ["/app/start.sh"]

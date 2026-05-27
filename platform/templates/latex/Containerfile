@@ -1,0 +1,34 @@
+FROM openvscode-base:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Full LaTeX stack — same set as the existing latex-image Containerfile
+RUN apt-get update && apt-get install -y \
+        texlive-latex-base \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-fonts-extra \
+        texlive-pictures \
+        texlive-science \
+        texlive-bibtex-extra \
+        texlive-extra-utils \
+        texlive-xetex \
+        pandoc \
+        libyaml-tiny-perl \
+        libfile-homedir-perl \
+        libunicode-linebreak-perl \
+        biber \
+        latexmk \
+    && rm -rf /var/lib/apt/lists/*
+
+# LaTeX Workshop + PDF viewer that uses VS Code's webview API (no random port)
+RUN /opt/openvscode-server/bin/openvscode-server \
+        --install-extension james-yu.latex-workshop \
+        --install-extension tomoki1207.pdf \
+        --extensions-dir /opt/vscode-extensions \
+        --user-data-dir /opt/vscode-data
+
+# Bake LaTeX Workshop settings — tools point to the native binaries inside
+# this image, so no wrapper scripts are needed.
+COPY templates/latex/settings.json /opt/vscode-data/User/settings.json

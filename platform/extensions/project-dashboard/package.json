@@ -1,0 +1,36 @@
+{
+  "name": "project-dashboard",
+  "displayName": "Project Dashboard",
+  "description": "Dashboard tab with tables and charts for the current project",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "projectDashboard.open",
+        "title": "Open Project Dashboard",
+        "category": "Project"
+      },
+      {
+        "command": "projectDashboard.viewPdf",
+        "title": "View PDF in Browser",
+        "category": "Project"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch":   "tsc -watch -p .",
+    "package": "vsce package --no-yarn"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node":   "^20.0.0",
+    "@vscode/vsce":  "^2.x",
+    "typescript":    "^5.x"
+  }
+}
