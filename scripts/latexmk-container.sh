@@ -1,22 +1,47 @@
 #!/usr/bin/env bash
-# This script compiles a LaTeX file using latexmk inside a container.
-# Usage: ./latexmk-container.sh path/to/your/file.tex
+# latexmk-container
+#
+# Drop-in replacement for latexmk that runs inside the ubuntu-latex
+# container machine. Handles biber + multi-pass ref resolution automatically.
+# The machine shares the macOS home directory at the same path, so no
+# bind mount or path translation is needed.
+
 set -euo pipefail
 
-IMAGE_NAME="ubuntu-latex"
+MACHINE_NAME="ubuntu-latex"
 
-container system start >/dev/null 2>&1 || true
+container machine start "${MACHINE_NAME}" 2>/dev/null || true
 
-TEX_FILE_HOST="${!#}"
-TEX_FILE_HOST="$(cd "$(dirname "$TEX_FILE_HOST")" && pwd)/$(basename "$TEX_FILE_HOST")"
+TEX_FILE="${!#}"
+TEX_FILE="$(cd "$(dirname "$TEX_FILE")" && pwd)/$(basename "$TEX_FILE")"
 
-HOST_DIR="$(dirname "$TEX_FILE_HOST")"
-TEX_FILENAME="$(basename "$TEX_FILE_HOST")"
-CONTAINER_DIR="/workspace"
+cd "$(dirname "$TEX_FILE")"
 
-container run \
-    --rm \
-    --mount "type=bind,source=${HOST_DIR},target=${CONTAINER_DIR}" \
-    --cwd "${CONTAINER_DIR}" \
-    "${IMAGE_NAME}" \
-    latexmk -pdf -bibtex -interaction=nonstopmode -file-line-error "${CONTAINER_DIR}/${TEX_FILENAME}"
+run_latexmk() {
+    container machine run \
+        latexmk -pdf -bibtex -cd -interaction=nonstopmode -file-line-error \
+        "$@" "${TEX_FILE}"
+}
+
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+
+set +e
+run_latexmk 2>&1 | tee "$LOG"
+status=${PIPESTATUS[0]}
+set -e
+
+# latexmk records a failed run in .fdb_latexmk. If no source file has changed
+# since, it declines to retry and replays the stored error instead of building
+# ("Nothing to do" + "gave an error in previous invocation of latexmk"). That
+# is a dead end whenever the failure was transient rather than a source defect
+# -- a stale .aux, say, which one clean pass would have cured -- because the
+# fix that clears it never changes a source file, so latexmk never reruns.
+# Force one full pass to break out of it.
+if [ "${status}" -ne 0 ] && grep -q "error in previous invocation of latexmk" "${LOG}"; then
+    echo "latexmk-container: stale failure in .fdb_latexmk; forcing a full rebuild." >&2
+    run_latexmk -g
+    exit $?
+fi
+
+exit "${status}"
