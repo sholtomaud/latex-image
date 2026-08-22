@@ -1,46 +1,29 @@
 #!/usr/bin/env bash
-# pandoc-container.sh — run pandoc inside the ubuntu-latex container
+# pandoc-container
+#
+# Runs pandoc inside the ubuntu-latex container machine. The machine shares
+# the macOS home directory at the same path, so arguments need no path
+# translation; only the working directory is carried across, via
+# `container machine run -w`.
+#
+# Transparent proxy -- see latexmk-container.sh for the rationale. In
+# particular -o is left alone, so relative output paths resolve against the
+# current directory exactly as they would with the real pandoc.
+
 set -euo pipefail
 
-IMAGE_NAME="ubuntu-latex"
+MACHINE_NAME="ubuntu-latex"
 
-container system start >/dev/null 2>&1 || true
+# VS Code spawns build tools with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin),
+# which does not include /usr/local/bin, so `container` has to be located by
+# absolute path rather than looked up on PATH.
+CONTAINER_BIN="${CONTAINER_BIN:-/usr/local/bin/container}"
+[ -x "${CONTAINER_BIN}" ] || CONTAINER_BIN="$(command -v container || true)"
+[ -n "${CONTAINER_BIN}" ] || {
+    echo "pandoc-container: cannot find the 'container' CLI (looked in /usr/local/bin and on PATH)." >&2
+    exit 127
+}
 
-# Resolve the input file to an absolute host path
-# Find the first argument that looks like a file (not a flag)
-INPUT_FILE=""
-OUTPUT_FILE=""
-EXTRA_ARGS=()
+# `container machine run` boots the machine on demand; there is no `machine start`.
 
-for arg in "$@"; do
-    if [[ "$arg" == "-o" ]]; then
-        CAPTURING_OUTPUT=true
-    elif [[ "${CAPTURING_OUTPUT:-false}" == "true" ]]; then
-        OUTPUT_FILE="$arg"
-        CAPTURING_OUTPUT=false
-    elif [[ "$arg" != -* ]] && [[ -z "$INPUT_FILE" ]]; then
-        INPUT_FILE="$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")"
-    else
-        EXTRA_ARGS+=("$arg")
-    fi
-done
-
-HOST_DIR="$(dirname "$INPUT_FILE")"
-INPUT_FILENAME="$(basename "$INPUT_FILE")"
-CONTAINER_DIR="/workspace"
-
-# Resolve output path — keep it in the same directory as input
-if [[ -n "$OUTPUT_FILE" ]]; then
-    OUTPUT_FILENAME="$(basename "$OUTPUT_FILE")"
-else
-    OUTPUT_FILENAME="${INPUT_FILENAME%.md}.pdf"
-fi
-
-container run \
-    --rm \
-    --mount "type=bind,source=${HOST_DIR},target=${CONTAINER_DIR}" \
-    --cwd "${CONTAINER_DIR}" \
-    "${IMAGE_NAME}" \
-    pandoc "${CONTAINER_DIR}/${INPUT_FILENAME}" \
-           -o "${CONTAINER_DIR}/${OUTPUT_FILENAME}" \
-           "${EXTRA_ARGS[@]}"
+exec "${CONTAINER_BIN}" machine run -n "${MACHINE_NAME}" -w "${PWD}" pandoc "$@"
