@@ -1,58 +1,30 @@
 #!/usr/bin/env bash
 # pdflatex-container
 #
-# A drop-in replacement for pdflatex that compiles inside the al23-latex
-# Apple container image. Stateless — spins up and tears down per compile.
+# Drop-in replacement for pdflatex that runs inside the ubuntu-latex container
+# machine. The machine shares the macOS home directory at the same path, so
+# arguments need no path translation -- only the working directory has to be
+# carried across, which `container machine run -w` does.
 #
-# VSCode LaTeX Workshop calls this script as:
-#   pdflatex-container [pdflatex-flags] /absolute/host/path/to/file.tex
-#
-# The script:
-#   1. Extracts the host directory and filename from the last argument
-#   2. Mounts that directory into the container at /workspace
-#   3. Runs pdflatex inside the container on the file
-#   4. Output (PDF + logs) lands in the same host directory automatically
+# Transparent proxy: the argument list is passed through untouched, so
+# `pdflatex --version` (LaTeX Workshop runs one to detect MiKTeX) and every
+# caller-supplied flag behave exactly as the real binary would. Like the real
+# pdflatex, output lands in the current directory, not beside the input file.
 
 set -euo pipefail
 
-IMAGE_NAME="ubuntu-latex"
+MACHINE_NAME="ubuntu-latex"
 
-# ----------------------------------------
-# Ensure the Apple container system is up
-# ----------------------------------------
-container system start >/dev/null 2>&1 || true
+# VS Code spawns build tools with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin),
+# which does not include /usr/local/bin, so `container` has to be located by
+# absolute path rather than looked up on PATH.
+CONTAINER_BIN="${CONTAINER_BIN:-/usr/local/bin/container}"
+[ -x "${CONTAINER_BIN}" ] || CONTAINER_BIN="$(command -v container || true)"
+[ -n "${CONTAINER_BIN}" ] || {
+    echo "pdflatex-container: cannot find the 'container' CLI (looked in /usr/local/bin and on PATH)." >&2
+    exit 127
+}
 
-# ----------------------------------------
-# Parse arguments
-# The last argument is always the .tex file path.
-# Everything before it are flags passed through to pdflatex.
-# ----------------------------------------
-if [ "$#" -lt 1 ]; then
-    echo "Usage: pdflatex-container [pdflatex-flags] /path/to/file.tex" >&2
-    exit 1
-fi
+# `container machine run` boots the machine on demand; there is no `machine start`.
 
-# Split: flags are all args except the last; file is the last arg
-TEX_FILE_HOST="${!#}"                      # last argument (host absolute path)
-FLAGS=("${@:1:$(($#-1))}")                 # all args except last
-
-# Resolve to absolute path in case a relative path slips through
-TEX_FILE_HOST="$(cd "$(dirname "$TEX_FILE_HOST")" && pwd)/$(basename "$TEX_FILE_HOST")"
-
-HOST_DIR="$(dirname "$TEX_FILE_HOST")"
-TEX_FILENAME="$(basename "$TEX_FILE_HOST")"
-CONTAINER_DIR="/workspace"
-TEX_FILE_CONTAINER="${CONTAINER_DIR}/${TEX_FILENAME}"
-
-# ----------------------------------------
-# Run pdflatex inside a throwaway container
-# --rm          removes the container after compile
-# --mount       binds the project folder to /workspace (read + write)
-# --cwd         sets working dir so relative \input{} paths resolve correctly
-# ----------------------------------------
-container run \
-    --rm \
-    --mount "type=bind,source=${HOST_DIR},target=${CONTAINER_DIR}" \
-    --cwd "${CONTAINER_DIR}" \
-    "${IMAGE_NAME}" \
-    pdflatex "${FLAGS[@]}" "${TEX_FILE_CONTAINER}"
+exec "${CONTAINER_BIN}" machine run -n "${MACHINE_NAME}" -w "${PWD}" pdflatex "$@"

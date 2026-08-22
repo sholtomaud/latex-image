@@ -1,9 +1,5 @@
-IMAGE_NAME = ubuntu-latex
-
-GIT_EMAIL ?= user@example.com
-GIT_NAME  ?= Your Name
-
-# Install destination for the wrapper scripts
+MACHINE_NAME   = ubuntu-latex
+MACHINE_IMAGE  = ubuntu-latex-machine
 INSTALL_DIR    = /usr/local/bin
 SCRIPT_PDF     = pdflatex-container
 SCRIPT_MK      = latexmk-container
@@ -11,124 +7,170 @@ SCRIPT_PANDOC  = pandoc-container
 SCRIPT_INDENT  = latexindent-container
 MERGE_SCRIPT   = scripts/merge-vscode-settings.sh
 
-.PHONY: start build install install-latexmk install-pandoc install-latexindent install-vscode-settings install-all uninstall check clean-images help
+.PHONY: machine-build machine-create machine-start machine-stop machine-rm machine-shell \
+        install install-latexmk install-pandoc install-latexindent \
+        install-vscode-settings install-all launchd-install launchd-uninstall \
+        uninstall check help
 
 # ----------------------------------------
-# start: ensure the Apple container system
-# daemon is running before any operation
+# machine-build: build the machine image
+# Run once (or after editing Containerfile)
 # ----------------------------------------
-start:
+machine-build:
+	@echo "Starting container system..."
 	container system start
+	@echo "Building machine image '$(MACHINE_IMAGE)'..."
+	container build -t "$(MACHINE_IMAGE)" .
+	@echo "Build complete."
 
 # ----------------------------------------
-# build: build the LaTeX image
-# Run once (or after editing Dockerfile)
+# machine-create: create the persistent machine from the image
 # ----------------------------------------
-build: start
-	@echo "🔨 Building image '$(IMAGE_NAME)'..."
-	container build -t "$(IMAGE_NAME)" .
-	@echo "✅ Build complete."
+machine-create: machine-build
+	@echo "Creating container machine '$(MACHINE_NAME)'..."
+	container machine create --set-default --name "$(MACHINE_NAME)" "$(MACHINE_IMAGE)"
+	@echo "Machine '$(MACHINE_NAME)' created and running."
 
 # ----------------------------------------
-# install: copy pdflatex wrapper to PATH
+# machine-start: start an existing machine (idempotent)
 # ----------------------------------------
-install: build
-	@echo "📦 Installing '$(SCRIPT_PDF)' to $(INSTALL_DIR)..."
+machine-start:
+	@container system start
+	@echo "Booting machine '$(MACHINE_NAME)' (no-op if already running)..."
+	container machine run -n "$(MACHINE_NAME)" true
+
+# ----------------------------------------
+# machine-stop: stop the machine
+# ----------------------------------------
+machine-stop:
+	container machine stop "$(MACHINE_NAME)"
+
+# ----------------------------------------
+# machine-rm: stop and permanently delete the machine
+# ----------------------------------------
+machine-rm:
+	-container machine stop "$(MACHINE_NAME)"
+	container machine rm "$(MACHINE_NAME)"
+
+# ----------------------------------------
+# machine-shell: open an interactive shell inside the machine
+# ----------------------------------------
+machine-shell:
+	container machine run -n "$(MACHINE_NAME)"
+
+# ----------------------------------------
+# launchd-install: auto-start the machine at every login
+# ----------------------------------------
+launchd-install:
+	@bash scripts/install-launchd.sh "$(MACHINE_NAME)"
+
+# ----------------------------------------
+# launchd-uninstall: remove the auto-start agent
+# ----------------------------------------
+launchd-uninstall:
+	@bash scripts/uninstall-launchd.sh
+
+# ----------------------------------------
+# install: install pdflatex wrapper script
+# Installed under both the container name and the native name so that
+# LaTeX Workshop's built-in recipes and our custom ones both work.
+# ----------------------------------------
+install:
+	@echo "Installing pdflatex wrappers to $(INSTALL_DIR)..."
 	@sudo cp scripts/pdflatex-container.sh $(INSTALL_DIR)/$(SCRIPT_PDF)
 	@sudo chmod +x $(INSTALL_DIR)/$(SCRIPT_PDF)
-	@echo "✅ $(SCRIPT_PDF) installed."
+	@sudo cp scripts/pdflatex-container.sh $(INSTALL_DIR)/pdflatex
+	@sudo chmod +x $(INSTALL_DIR)/pdflatex
+	@echo "Done."
 
 # ----------------------------------------
-# install-latexmk: copy latexmk wrapper to PATH
-# (handles biber + multi-pass automatically)
+# install-latexmk: install latexmk wrapper script
 # ----------------------------------------
-install-latexmk: build
-	@echo "📦 Installing '$(SCRIPT_MK)' to $(INSTALL_DIR)..."
+install-latexmk:
+	@echo "Installing latexmk wrappers to $(INSTALL_DIR)..."
 	@sudo cp scripts/latexmk-container.sh $(INSTALL_DIR)/$(SCRIPT_MK)
 	@sudo chmod +x $(INSTALL_DIR)/$(SCRIPT_MK)
-	@echo "✅ $(SCRIPT_MK) installed."
+	@sudo cp scripts/latexmk-container.sh $(INSTALL_DIR)/latexmk
+	@sudo chmod +x $(INSTALL_DIR)/latexmk
+	@echo "Done."
 
 # ----------------------------------------
-# install-pandoc: copy pandoc wrapper to PATH
+# install-pandoc: install pandoc wrapper script
 # ----------------------------------------
-install-pandoc: build
-	@echo "📦 Installing '$(SCRIPT_PANDOC)' to $(INSTALL_DIR)..."
+install-pandoc:
+	@echo "Installing pandoc wrappers to $(INSTALL_DIR)..."
 	@sudo cp scripts/pandoc-container.sh $(INSTALL_DIR)/$(SCRIPT_PANDOC)
 	@sudo chmod +x $(INSTALL_DIR)/$(SCRIPT_PANDOC)
-	@echo "✅ $(SCRIPT_PANDOC) installed."
+	@sudo cp scripts/pandoc-container.sh $(INSTALL_DIR)/pandoc
+	@sudo chmod +x $(INSTALL_DIR)/pandoc
+	@echo "Done."
 
 # ----------------------------------------
-# install-latexindent: copy latexindent wrapper to PATH
+# install-latexindent: install latexindent wrapper script
 # ----------------------------------------
-install-latexindent: build
-	@echo "📦 Installing '$(SCRIPT_INDENT)' to $(INSTALL_DIR)..."
+install-latexindent:
+	@echo "Installing latexindent wrappers to $(INSTALL_DIR)..."
 	@sudo cp scripts/latexindent-container.sh $(INSTALL_DIR)/$(SCRIPT_INDENT)
 	@sudo chmod +x $(INSTALL_DIR)/$(SCRIPT_INDENT)
-	@echo "✅ $(SCRIPT_INDENT) installed."
+	@sudo cp scripts/latexindent-container.sh $(INSTALL_DIR)/latexindent
+	@sudo chmod +x $(INSTALL_DIR)/latexindent
+	@echo "Done."
 
 # ----------------------------------------
-# install-vscode-settings: merge latex-workshop
-# settings into global VSCode user settings.json
+# install-vscode-settings: merge latex-workshop settings into VSCode
 # ----------------------------------------
 install-vscode-settings:
 	@bash $(MERGE_SCRIPT)
 
 # ----------------------------------------
-# install-all: install all wrapper scripts
-# and optionally merge VSCode settings
+# install-all: full first-time setup
+# Build image, create machine, install wrappers, set up auto-start, configure VSCode
 # ----------------------------------------
-install-all: install install-latexmk install-pandoc install-latexindent install-vscode-settings
-	@echo "✅ All scripts installed."
+install-all: machine-create install install-latexmk install-pandoc install-latexindent launchd-install install-vscode-settings
+	@echo ""
+	@echo "Setup complete. Open any .tex file in VSCode and build with LaTeX Workshop."
+	@echo "The machine starts automatically at each login."
+	@echo ""
 
 # ----------------------------------------
-# uninstall: remove all wrapper scripts
+# uninstall: remove wrapper scripts, launchd agent, and machine
 # ----------------------------------------
-uninstall:
-	@echo "🗑  Removing wrapper scripts from $(INSTALL_DIR)..."
-	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_PDF)
-	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_MK)
-	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_PANDOC)
-	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_INDENT)
-	@echo "✅ Uninstalled."
+uninstall: launchd-uninstall machine-rm
+	@echo "Removing wrapper scripts from $(INSTALL_DIR)..."
+	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_PDF) $(INSTALL_DIR)/pdflatex
+	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_MK)  $(INSTALL_DIR)/latexmk
+	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_PANDOC) $(INSTALL_DIR)/pandoc
+	@sudo rm -f $(INSTALL_DIR)/$(SCRIPT_INDENT) $(INSTALL_DIR)/latexindent
+	@echo "Uninstalled."
 
 # ----------------------------------------
-# check: smoke-test all tools inside the image
+# check: verify the machine is running and all tools work
 # ----------------------------------------
-check: start
-	@echo "🔍 Checking pdflatex..."
-	container run --rm $(IMAGE_NAME) pdflatex --version
-	@echo "🔍 Checking latexmk..."
-	container run --rm $(IMAGE_NAME) latexmk --version
-	@echo "🔍 Checking pandoc..."
-	container run --rm $(IMAGE_NAME) pandoc --version
-	@echo "🔍 Checking latexindent..."
-	container run --rm $(IMAGE_NAME) latexindent --version
-	@echo "✅ All checks passed."
-
-# ----------------------------------------
-# clean-images: remove the built image
-# ----------------------------------------
-clean-images:
-	@echo "🗑  Removing image '$(IMAGE_NAME)'..."
-	-container rmi "$(IMAGE_NAME)"
-	@echo "✅ Done."
+check:
+	@echo "Machine state:"
+	@container machine ls
+	@echo ""
+	@echo "Checking LaTeX tools inside machine..."
+	@container machine run -n "$(MACHINE_NAME)" pdflatex --version | head -1
+	@container machine run -n "$(MACHINE_NAME)" latexmk --version | head -1
+	@container machine run -n "$(MACHINE_NAME)" pandoc --version | head -1
+	@container machine run -n "$(MACHINE_NAME)" latexindent --version | head -1
+	@echo "All checks passed."
 
 help:
 	@echo ""
-	@echo "Usage:"
-	@echo "  make build                  — Build the Docker image (run once)"
-	@echo "  make install                — Build + install pdflatex wrapper"
-	@echo "  make install-latexmk        — Build + install latexmk wrapper"
-	@echo "  make install-pandoc         — Build + install pandoc wrapper"
-	@echo "  make install-latexindent    — Build + install latexindent wrapper"
-	@echo "  make install-vscode-settings — Merge latex-workshop settings into VSCode"
-	@echo "  make install-all            — Build + install all wrappers + VSCode settings"
-	@echo "  make uninstall              — Remove all wrapper scripts"
-	@echo "  make check                  — Verify all tools work inside the image"
-	@echo "  make clean-images           — Delete the built image"
+	@echo "First-time setup:"
+	@echo "  make install-all             — Build image + create machine + install wrappers + launchd + VSCode settings"
 	@echo ""
-	@echo "Per-project usage after 'make install-all':"
-	@echo "  Open any folder in VSCode and compile with LaTeX Workshop."
-	@echo "  Use 'latexmk (full)' recipe for documents with citations/references."
-	@echo "  No per-project setup needed."
+	@echo "Machine lifecycle:"
+	@echo "  make machine-start           — Start the machine manually"
+	@echo "  make machine-stop            — Stop the machine"
+	@echo "  make machine-shell           — Open a shell inside the machine"
+	@echo "  make machine-rm              — Delete the machine and its filesystem"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  make machine-build           — Rebuild the image (after editing Containerfile)"
+	@echo "  make check                   — Verify machine is up and all tools work"
+	@echo "  make install-vscode-settings — Re-merge latex-workshop settings into VSCode"
+	@echo "  make uninstall               — Remove everything"
 	@echo ""

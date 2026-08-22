@@ -1,35 +1,43 @@
 # LaTeX Container
 
-A single Apple Container CLI image that provides LaTeX to any project folder — no per-project setup required.
+A persistent Apple container machine that provides LaTeX to any project folder — no per-project setup, no cold starts.
 
-## How it works
+## Quickstart
 
-- One Docker image (`ubuntu-latex`) holds the full LaTeX installation.
-- A set of small wrapper scripts live on your `$PATH`, one for each tool.
-- When VSCode LaTeX Workshop compiles a `.tex` file, it calls the appropriate wrapper script.
-- The script spins up a throwaway container, mounts **only that project's folder**, runs the tool, and exits.
-- The PDF lands right next to your `.tex` file, on the host. No persistent container. No cleanup. No per-project config.
-
-```
-~/projects/thesis/   →  container mounts this  →  thesis.pdf appears here
-~/projects/paper/    →  container mounts this  →  paper.pdf appears here
-```
-
-## First-time setup
+**Prerequisites:** [Apple Container CLI](https://developer.apple.com/documentation/virtualization) and the [LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop) VSCode extension.
 
 ```bash
 # 1. Clone this repo
-git clone <your-repo-url> latex-container
-cd latex-container
+git clone <your-repo-url> latex-image
+cd latex-image
 
-# 2. Build the image, install all wrapper scripts, and optionally
-#    merge the latex-workshop settings into your global VSCode settings
+# 2. Build the machine image, create the persistent machine,
+#    install wrapper scripts, set up auto-start, and configure VSCode
 make install-all
-# This will prompt for your sudo password to copy scripts to /usr/local/bin,
-# then ask whether to merge the VSCode settings automatically.
+#    (prompts for sudo to copy scripts to /usr/local/bin,
+#     then asks whether to merge VSCode settings)
 ```
 
-That's it. You never need to touch this repo again unless you want to update the LaTeX installation.
+That's it. The machine starts automatically at each login. Open any `.tex` file in VSCode and hit **Build**.
+
+---
+
+## How it works
+
+- One container machine (`ubuntu-latex`) holds the full TeX Live installation and runs persistently in the background.
+- A set of small wrapper scripts live on your `$PATH`, one for each tool (`pdflatex-container`, `latexmk-container`, etc.).
+- When LaTeX Workshop compiles a `.tex` file, it calls the wrapper script on your Mac.
+- The script runs the tool inside the already-warm machine. Because the machine shares your macOS home directory at the same path, no mounting or path translation is needed.
+- The PDF lands right next to your `.tex` file. No per-project config. No container cold starts.
+
+```
+~/projects/thesis/   →  machine compiles this  →  thesis.pdf appears here
+~/projects/paper/    →  machine compiles this  →  paper.pdf appears here
+```
+
+The machine is started automatically at login via a launchd agent. The wrapper scripts also start it on demand if it isn't running, so you never need to manage it manually.
+
+---
 
 ## Per-project usage
 
@@ -38,11 +46,13 @@ That's it. You never need to touch this repo again unless you want to update the
 3. Hit the LaTeX Workshop **Build** button (or `Cmd+Shift+P` → `LaTeX Workshop: Build with recipe`).
 4. The PDF appears in the same folder.
 
-The default recipe is `latexmk (full — biber + refs)`, which handles citations, cross-references, and TOC resolution automatically. For simple documents you can switch to a `pdflatex` recipe via `Cmd+Shift+P` → `LaTeX Workshop: Build with recipe`.
+The default recipe is `latexmk (full — biber + refs)`, which handles citations, cross-references, and TOC resolution automatically. For simple documents, switch recipes via `Cmd+Shift+P` → `LaTeX Workshop: Build with recipe`.
 
-### VSCode settings
+---
 
-If you chose to merge settings during `make install-all`, your global VSCode `settings.json` is already configured. If you skipped it, you can run it any time:
+## VSCode settings
+
+`make install-all` merges the latex-workshop settings into your global VSCode `settings.json` automatically. To run it separately at any time:
 
 ```bash
 make install-vscode-settings
@@ -78,16 +88,16 @@ Or add the settings manually via `Cmd+Shift+P` → `Open User Settings (JSON)`:
     ],
     "latex-workshop.latex.recipes": [
         {
+            "name": "latexmk (full — biber + refs)",
+            "tools": ["latexmk-container"]
+        },
+        {
             "name": "pdflatex (single pass)",
             "tools": ["pdflatex-container"]
         },
         {
             "name": "pdflatex (two pass — TOC / refs)",
             "tools": ["pdflatex-container", "pdflatex-container-2"]
-        },
-        {
-            "name": "latexmk (full — biber + refs)",
-            "tools": ["latexmk-container"]
         }
     ],
     "latex-workshop.latex.recipe.default": "latexmk (full — biber + refs)",
@@ -96,43 +106,54 @@ Or add the settings manually via `Cmd+Shift+P` → `Open User Settings (JSON)`:
 }
 ```
 
+---
+
 ## Updating LaTeX packages
 
-Edit the `Dockerfile`, then:
+Edit `Containerfile`, then rebuild and recreate the machine:
 
 ```bash
-make build
-# (no need to re-run make install-all — the scripts on PATH stay the same)
+make machine-rm
+make install-all
 ```
+
+The wrapper scripts on your PATH don't need to change.
+
+---
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `make build` | Build the image |
-| `make install` | Build + install `pdflatex-container` wrapper |
-| `make install-latexmk` | Build + install `latexmk-container` wrapper |
-| `make install-pandoc` | Build + install `pandoc-container` wrapper |
-| `make install-latexindent` | Build + install `latexindent-container` wrapper |
-| `make install-vscode-settings` | Merge latex-workshop settings into global VSCode settings |
-| `make install-all` | All of the above |
-| `make uninstall` | Remove all wrapper scripts from `/usr/local/bin` |
-| `make check` | Verify all tools work inside the image |
-| `make clean-images` | Delete the built image |
+| `make install-all` | Full setup: build image, create machine, install wrappers, launchd agent, VSCode settings |
+| `make machine-start` | Start the machine manually |
+| `make machine-stop` | Stop the machine |
+| `make machine-shell` | Open an interactive shell inside the machine |
+| `make machine-rm` | Delete the machine and its filesystem |
+| `make machine-build` | Rebuild the image (after editing `Containerfile`) |
+| `make launchd-install` | Install the login auto-start agent |
+| `make launchd-uninstall` | Remove the login auto-start agent |
+| `make install-vscode-settings` | Merge latex-workshop settings into VSCode |
+| `make check` | Verify machine is running and all tools work |
+| `make uninstall` | Remove wrapper scripts, launchd agent, and machine |
+
+---
 
 ## File layout
 
 ```
-latex-container/
-├── Dockerfile              # LaTeX image definition
-├── Makefile                # Build + install automation
+latex-image/
+├── Containerfile                   # Machine image definition
+├── Makefile                        # Setup and lifecycle automation
 ├── README.md
 ├── .vscode/
-│   └── settings.json       # Reference VSCode settings (also merged by make install-all)
+│   └── settings.json               # Reference VSCode settings (merged by make install-all)
 └── scripts/
-    ├── pdflatex-container.sh       # Drop-in pdflatex wrapper
-    ├── latexmk-container.sh        # Drop-in latexmk wrapper (biber + full refs)
-    ├── pandoc-container.sh         # Drop-in pandoc wrapper
-    ├── latexindent-container.sh    # Drop-in latexindent wrapper (formatting)
+    ├── pdflatex-container.sh       # pdflatex wrapper → container machine run
+    ├── latexmk-container.sh        # latexmk wrapper  → container machine run
+    ├── pandoc-container.sh         # pandoc wrapper   → container machine run
+    ├── latexindent-container.sh    # latexindent wrapper → container machine run
+    ├── install-launchd.sh          # Installs the login auto-start launchd agent
+    ├── uninstall-launchd.sh        # Removes the launchd agent
     └── merge-vscode-settings.sh    # Merges .vscode/settings.json into global VSCode settings
 ```

@@ -1,12 +1,31 @@
 {
     // ----------------------------------------
-    // LaTeX Workshop — stateless container setup
+    // LaTeX Workshop — persistent container-machine setup
+    //
+    // Tools run inside the long-lived `ubuntu-latex` container machine, which
+    // shares the macOS home directory at the same path. The machine is
+    // persistent, not stateless: it is created by `make machine-create` and
+    // started at login by a launchd agent.
+    //
     // Requires: all wrapper scripts installed in /usr/local/bin
-    // (run `make install-all` from your latex-container repo)
+    // (run `make install-all` from the latex-image repo)
     // ----------------------------------------
     "latex-workshop.view.pdf.viewer": "browser",
-    // Clean auxiliary files after each build
-    "latex-workshop.latex.autoClean.run": "onBuilt",
+    // Auto-clean is OFF on purpose. The clean list below includes *.aux,
+    // *.fls, *.log and *.fdb_latexmk -- which are exactly the files latexmk
+    // uses to decide what needs rerunning. Deleting them after every build
+    // both defeats latexmk's incremental logic and races the next build,
+    // producing errors that look like filesystem faults:
+    //
+    //   Latexmk: Couldn't read 'article.fdb_latexmk' even though it exists
+    //   ./article.tex:0: I can't write on file `article.log'.
+    //
+    // (autoBuild.run defaults to onFileChange, so a save during a build queues
+    //  the next one while the previous build's cleaner is still deleting.)
+    //
+    // Clean on demand instead: Cmd+Shift+P -> "LaTeX Workshop: Clean up
+    // auxiliary files", which uses the fileTypes list below.
+    "latex-workshop.latex.autoClean.run": "never",
     "latex-workshop.latex.clean.method": "glob",
     "latex-workshop.latex.clean.fileTypes": [
         "*.aux",
@@ -23,35 +42,53 @@
     ],
     // ----------------------------------------
     // Tools — each tool is one shell command.
-    // %DOCFILE% = full host absolute path to the .tex file.
-    // Our wrapper scripts handle mounting + path translation.
+    //
+    // The wrapper scripts are transparent proxies: they forward argv verbatim
+    // into the container machine and carry the working directory across. All
+    // build flags therefore live HERE, not inside the wrappers.
+    //
+    // Commands are ABSOLUTE paths on purpose. LaTeX Workshop spawns tools with
+    // { shell: false } using the PATH that VS Code itself inherited -- which is
+    // just /usr/bin:/bin:/usr/sbin:/sbin when VS Code is opened from Finder or
+    // the Dock. A bare "latexmk-container" then fails with "spawn ENOENT".
+    //
+    // %DOC_EXT% = full host absolute path to the root .tex file.
+    // (Do not use %DOCFILE% — that is the bare basename with no extension and
+    //  no directory, so it only resolves by accident of the spawn cwd.)
     // ----------------------------------------
     "latex-workshop.latex.tools": [
         {
             "name": "pdflatex-container",
-            "command": "pdflatex-container",
+            "command": "/usr/local/bin/pdflatex-container",
             "args": [
                 "-interaction=nonstopmode",
                 "-file-line-error",
-                "%DOCFILE%"
+                "%DOC_EXT%"
             ]
         },
         {
             // Two-pass for cross-references, TOC, etc.
             "name": "pdflatex-container-2",
-            "command": "pdflatex-container",
+            "command": "/usr/local/bin/pdflatex-container",
             "args": [
                 "-interaction=nonstopmode",
                 "-file-line-error",
-                "%DOCFILE%"
+                "%DOC_EXT%"
             ]
         },
         {
-            // Full build: biber + multi-pass ref resolution
+            // Full build: biber + multi-pass ref resolution.
+            // -pdf is required — latexmk defaults to DVI without it.
+            // -cd makes latexmk chdir to the document, so \input{} resolves.
             "name": "latexmk-container",
-            "command": "latexmk-container",
+            "command": "/usr/local/bin/latexmk-container",
             "args": [
-                "%DOCFILE%"
+                "-pdf",
+                "-bibtex",
+                "-cd",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOC_EXT%"
             ]
         }
     ],
@@ -85,5 +122,5 @@
     // Formatting — use latexindent via container wrapper
     // ----------------------------------------
     "latex-workshop.formatting.latex": "latexindent",
-    "latex-workshop.formatting.latexindent.path": "latexindent-container"
+    "latex-workshop.formatting.latexindent.path": "/usr/local/bin/latexindent-container"
 }

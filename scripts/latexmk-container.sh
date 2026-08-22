@@ -1,33 +1,41 @@
 #!/usr/bin/env bash
 # latexmk-container
 #
-# Drop-in replacement for latexmk that runs inside the ubuntu-latex
-# container machine. Handles biber + multi-pass ref resolution automatically.
-# The machine shares the macOS home directory at the same path, so no
-# bind mount or path translation is needed.
+# Drop-in replacement for latexmk that runs inside the ubuntu-latex container
+# machine. The machine shares the macOS home directory at the same path, so
+# arguments need no path translation -- only the working directory has to be
+# carried across, which `container machine run -w` does.
+#
+# The wrapper is a transparent proxy: it never inspects or rewrites the
+# argument list. Build flags belong to the caller (see latex-workshop.latex.tools
+# in .vscode/settings.json), so probes like `latexmk --version` -- LaTeX
+# Workshop runs one to detect MiKTeX -- pass straight through.
 
 set -euo pipefail
 
 MACHINE_NAME="ubuntu-latex"
 
-container machine start "${MACHINE_NAME}" 2>/dev/null || true
+# VS Code spawns build tools with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin),
+# which does not include /usr/local/bin, so `container` has to be located by
+# absolute path rather than looked up on PATH.
+CONTAINER_BIN="${CONTAINER_BIN:-/usr/local/bin/container}"
+[ -x "${CONTAINER_BIN}" ] || CONTAINER_BIN="$(command -v container || true)"
+[ -n "${CONTAINER_BIN}" ] || {
+    echo "latexmk-container: cannot find the 'container' CLI (looked in /usr/local/bin and on PATH)." >&2
+    exit 127
+}
 
-TEX_FILE="${!#}"
-TEX_FILE="$(cd "$(dirname "$TEX_FILE")" && pwd)/$(basename "$TEX_FILE")"
-
-cd "$(dirname "$TEX_FILE")"
+# `container machine run` boots the machine on demand; there is no `machine start`.
 
 run_latexmk() {
-    container machine run \
-        latexmk -pdf -bibtex -cd -interaction=nonstopmode -file-line-error \
-        "$@" "${TEX_FILE}"
+    "${CONTAINER_BIN}" machine run -n "${MACHINE_NAME}" -w "${PWD}" latexmk "$@"
 }
 
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
 set +e
-run_latexmk 2>&1 | tee "$LOG"
+run_latexmk "$@" 2>&1 | tee "$LOG"
 status=${PIPESTATUS[0]}
 set -e
 
@@ -40,7 +48,7 @@ set -e
 # Force one full pass to break out of it.
 if [ "${status}" -ne 0 ] && grep -q "error in previous invocation of latexmk" "${LOG}"; then
     echo "latexmk-container: stale failure in .fdb_latexmk; forcing a full rebuild." >&2
-    run_latexmk -g
+    run_latexmk -g "$@"
     exit $?
 fi
 
